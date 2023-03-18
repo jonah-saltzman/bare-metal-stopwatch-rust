@@ -1,0 +1,23 @@
+[package]
+name = "stopwatch"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cortex-m-rt = "0.7.3"
+panic-itm = "0.4.2"
+stm32f439zi_startup = { git = "https://github.com/jonah-saltzman/stm32f439_startup"}
+
+[dependencies.stm32f4]
+version = "0.15.1"
+features = ["stm32f429", "rt"]
+
+[dependencies.cortex-m]
+version = "0.7.7"
+features = ["inline-asm"]
+
+[dependencies.stm32f4xx-hal]
+version = "0.14.0"
+features = ["defmt", "stm32f439"]
