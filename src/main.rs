@@ -1,27 +1,65 @@
 #![no_main]
 #![no_std]
 
-use stm32f4xx_hal::{pac::Peripherals, interrupt as interrupt_enum, interrupt};
-use cortex_m_rt::entry;
-use stm32f439zi_startup::{ClockInit, init_clocks, settings::*};
 use cortex_m::{peripheral::NVIC, Peripherals as ArmPeripherals};
+use cortex_m_rt::entry;
+use stm32f439zi_startup::{init_clocks, settings::*, ClockInit, ClockSpeeds};
+use stm32f4xx_hal::{interrupt, pac::Peripherals};
+
+mod button;
+mod display;
+mod stopwatch;
+use display::{
+    enable_display, get_should_render_display, initialize_display_timer, render_display,
+    set_should_render_display,
+};
+use stopwatch::{
+    initialize_stopwatch, is_tim5_counting, set_should_toggle_tim5, set_tim5_counting,
+    should_toggle_tim5,
+};
 
 #[entry]
 fn main() -> ! {
     let stm_peripherals = Peripherals::take().unwrap();
     let mut arm_peripherals = cortex_m::Peripherals::take().unwrap();
 
-    initialize_peripherals(&stm_peripherals, &mut arm_peripherals);
+    let frequencies = initialize_peripherals(&stm_peripherals);
 
+    initialize_display_timer(
+        &stm_peripherals.TIM2,
+        &mut arm_peripherals,
+        &frequencies,
+        1200,
+    );
+    initialize_stopwatch(&stm_peripherals, &mut arm_peripherals, &frequencies);
+    enable_display(&stm_peripherals);
+
+    // enable the display render clock
     stm_peripherals.TIM2.cr1.modify(|_, w| w.cen().set_bit());
 
     loop {
+        if get_should_render_display() {
+            render_display(&stm_peripherals.GPIOA, &stm_peripherals.GPIOE);
+            set_should_render_display(false);
+        }
+        if should_toggle_tim5() {
+            if is_tim5_counting() {
+                // stop timer
+                stm_peripherals.TIM5.cr1.modify(|_, w| w.cen().disabled());
+                set_tim5_counting(false);
+            } else {
+                // reset & start timer
+                stm_peripherals.TIM5.egr.write(|w| w.ug().update());
+                stm_peripherals.TIM5.cr1.modify(|_, w| w.cen().enabled());
+                set_tim5_counting(true);
+            }
+            set_should_toggle_tim5(false);
+        }
         cortex_m::asm::wfi();
     }
 }
 
-fn initialize_peripherals(stm_peripherals: &Peripherals, arm_peripherals: &mut ArmPeripherals) -> () {
-
+fn initialize_peripherals(stm_peripherals: &Peripherals) -> ClockSpeeds {
     const SETTINGS: ClockInit = ClockInit {
         pll_source_hse: Some(true),
         sys_source: ClockSource::Pll,
@@ -35,45 +73,31 @@ fn initialize_peripherals(stm_peripherals: &Peripherals, arm_peripherals: &mut A
         apb2_pre: APBxFactor::Two,
         apb1_pre: APBxFactor::Four,
     };
-    let _speeds = init_clocks(SETTINGS, stm_peripherals);
+    let speeds = init_clocks(SETTINGS, stm_peripherals);
 
-    stm_peripherals.RCC.ahb1enr.modify(|_, w| w
-        .gpioaen().enabled()
-        .gpioben().enabled()
-        .gpiocen().enabled()
-        .gpioden().enabled()
-        .gpioeen().enabled()
-        .dma1en().enabled()
-        .dma2en().enabled()
-    );
-    stm_peripherals.RCC.apb1enr.modify(|_, w| w
-        .tim2en().enabled()
-        .tim5en().enabled()
-    );
-    stm_peripherals.RCC.apb2enr.modify(|_, w| w
-        .tim10en().enabled()
-    );
+    stm_peripherals.RCC.ahb1enr.modify(|_, w| {
+        w.gpioaen()
+            .enabled()
+            .gpiocen()
+            .enabled()
+            .gpioeen()
+            .enabled()
+    });
+    stm_peripherals
+        .RCC
+        .apb1enr
+        .modify(|_, w| w.tim2en().enabled().tim5en().enabled());
+    // stm_peripherals.RCC.apb2enr.modify(|_, w| w
+    //     .tim10en().enabled()
+    // );
 
-    stm_peripherals.GPIOB.moder.modify(|_,w| w
-        .moder0().output()
-        .moder5().output()
-        .moder7().output()
-        .moder14().output()
-    );
-
-    stm_peripherals.TIM2.cr1.modify(|_, w| w.arpe().set_bit().urs().set_bit());
-    stm_peripherals.TIM2.arr.write(|w| w.arr().bits(8399999));
-    stm_peripherals.TIM2.egr.write(|w| w.ug().set_bit());
-    stm_peripherals.TIM2.dier.modify(|_, w| w.uie().set_bit());
-    
-    unsafe {
-        arm_peripherals.NVIC.set_priority(interrupt_enum::TIM2, 1);
-        NVIC::unmask(interrupt_enum::TIM2)
-    }
-
+    speeds
 }
 
-#[interrupt]
-unsafe fn TIM2() {
-    Peripherals::steal().TIM2.sr.write(|w| w.uif().clear_bit());
+/// SAFETY: enabling an interrupt during a critical section could break it
+pub fn enable_interrupt(arm_peripherals: &mut ArmPeripherals, intr: interrupt, prio: u8) {
+    unsafe {
+        arm_peripherals.NVIC.set_priority(intr, prio);
+        NVIC::unmask(intr);
+    }
 }
