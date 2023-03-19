@@ -1,19 +1,25 @@
+/// stopwatch module
+/// keeps time, starts and stops timer
+
 use stm32f4::stm32f429::TIM5;
 
 use crate::{
-    button::enable_user_button, enable_interrupt, interrupt, ArmPeripherals, ClockSpeeds,
-    Peripherals,
+    button::{enable_user_button, ButtonMachineWrapper},
+    enable_interrupt, interrupt, ArmPeripherals, ClockSpeeds, Peripherals,
 };
 
+/// sets up all peripherals involved in stopwatch functionality
 pub fn initialize_stopwatch(
     stm_peripherals: &Peripherals,
     arm_peripherals: &mut ArmPeripherals,
     frequencies: &ClockSpeeds,
-) {
-    enable_user_button(&stm_peripherals, arm_peripherals);
+) -> ButtonMachineWrapper {
     initialize_stopwatch_timer(&stm_peripherals.TIM5, arm_peripherals, frequencies, 100);
+    enable_user_button(stm_peripherals, arm_peripherals)
 }
 
+/// tim5 counts time for the stopwatch
+/// in 0.01s increments
 fn initialize_stopwatch_timer(
     tim5: &TIM5,
     arm_peripherals: &mut ArmPeripherals,
@@ -29,11 +35,25 @@ fn initialize_stopwatch_timer(
     enable_interrupt(arm_peripherals, interrupt::TIM5, 40);
 }
 
+pub fn stop_tim5(tim5: &TIM5) {
+    tim5.cr1.modify(|_, w| w.cen().disabled());
+    set_tim5_counting(false);
+}
+
+pub fn start_tim5(tim5: &TIM5) {
+    tim5.egr.write(|w| w.ug().update());
+    tim5.cr1.modify(|_, w| w.cen().enabled());
+    set_tim5_counting(true);
+}
+
+/// tim5 interrupt increments the time counter
 #[interrupt]
 unsafe fn TIM5() {
     Peripherals::steal().TIM5.sr.write(|w| w.uif().clear_bit());
     inc_seconds();
 }
+
+/// Static variables and accessor functions
 
 static mut CENTI_SECONDS: u16 = 0;
 static mut TIM5_COUNTING: bool = false;
@@ -57,7 +77,7 @@ pub fn is_tim5_counting() -> bool {
 }
 
 #[inline(always)]
-pub fn set_tim5_counting(val: bool) {
+fn set_tim5_counting(val: bool) {
     unsafe {
         TIM5_COUNTING = val;
     }

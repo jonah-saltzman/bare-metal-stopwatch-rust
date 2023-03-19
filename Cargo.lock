@@ -309,7 +309,6 @@ dependencies = [
  "panic-itm",
  "stm32f4",
  "stm32f439zi_startup",
- "stm32f4xx-hal",
 ]
 
 [[package]]

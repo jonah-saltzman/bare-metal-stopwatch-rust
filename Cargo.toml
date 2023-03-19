@@ -17,7 +17,3 @@ features = ["stm32f429", "rt"]
 [dependencies.cortex-m]
 version = "0.7.7"
 features = ["inline-asm"]
-
-[dependencies.stm32f4xx-hal]
-version = "0.14.0"
-features = ["defmt", "stm32f439"]
