@@ -17,7 +17,8 @@ was written in C. Besides re-writing in Rust, I made the following improvements:
 - Button de-bouncing: previously the user button was associated with an interrupt on
 the button's rising trigger trigger. If the button bounced, the stopwatch could be
 started and stopped instantaneously. This time, I wrote a state machine to de-bounce
-the button's input in [/src/button.rs](/src/button.rs)
+the button's input in [/src/button.rs](/src/button.rs) taking inspiration from
+[this explanation](https://www.eeweb.com/debouncing-push-buttons-using-a-state-machine-approach/)
 - Smaller ISRs: Previously, ISRs performed too much functionality, including rendering
 the display and toggling timers. Now, ISRs only set flags which are checked in the `main`
 loop and drive functionality there.
@@ -36,3 +37,8 @@ button.
 [YouTube link](https://www.youtube.com/shorts/_y3RYFs5QW8)
 
 See the [C-based repository](https://github.com/jonah-saltzman/bare-metal-stopwatch/) for a detailed explanation of all the functionality within stopwatch.
+
+### Usage
+Build with `cargo build --target thumbv7em-none-eabihfl`. To program the MCU,
+I use openocd and gdb. The [cargo config](/.cargo/config.toml) and [gdb config](/openocd.gdb)
+are included in this repository.
